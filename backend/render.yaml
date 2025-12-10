@@ -1,0 +1,19 @@
+services:
+- type: web
+  name: ai-textbook-backend
+  runtime: python
+  buildCommand: "pip install -r requirements.txt"
+  startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+  envVars:
+  - key: PORT
+    sync: false
+  - key: DEBUG
+    value: "False"
+  - key: HOST
+    value: "0.0.0.0"
+  region: oregon
+  plan: starter
+  autoDeploy: true
+  numInstances: 1
+  disk: null
+  healthCheckPath: /api/v1/health
