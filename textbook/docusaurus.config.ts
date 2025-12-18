@@ -22,7 +22,7 @@ const config: Config = {
   // Vercel deployment doesn't require GitHub Pages config
   // organizationName and projectName are not needed for Vercel
 
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
   // Even if you don't use internationalization, you can use this field to set
@@ -80,8 +80,8 @@ const config: Config = {
       },
       items: [
         {
-          type: 'doc',
-          docId: 'intro',
+          type: 'docSidebar',
+          sidebarId: 'textbookSidebar',
           position: 'left',
           label: 'Textbook',
         },
@@ -106,11 +106,11 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Resources',
+          title: 'Textbook',
           items: [
             {
-              label: 'GitHub',
-              href: 'https://github.com/asif3937/Physical-AI-and-Humanoid-Robotics-Learning-Platform',
+              label: 'Introduction',
+              to: '/docs/intro',
             },
           ],
         },

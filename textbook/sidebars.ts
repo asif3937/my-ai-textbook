@@ -17,7 +17,7 @@ const sidebars: SidebarsConfig = {
   textbookSidebar: [
     {
       type: 'category',
-      label: 'Introduction',
+      label: 'Getting Started',
       items: ['intro'],
     },
     {

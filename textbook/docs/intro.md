@@ -1,6 +1,6 @@
 ---
-slug: /
 sidebar_label: Introduction
+slug: /
 ---
 
 # AI-Native Textbook: Physical AI and Humanoid Robotics
