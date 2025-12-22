@@ -84,3 +84,4 @@ history/scratch/
 config.local
 local.properties
 .vercel
+.env*.local
