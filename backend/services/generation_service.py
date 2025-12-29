@@ -4,18 +4,111 @@ from config.settings import settings
 from utils import logger
 import json
 
+# Import for local LLM fallback
+LOCAL_LLM_AVAILABLE = False
+try:
+    # Try to import and initialize to check if everything works
+    import torch  # Check if torch can be imported first
+    from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+    # Try to initialize a basic model to check if everything works
+    model_name = "microsoft/DialoGPT-small"
+    test_tokenizer = AutoTokenizer.from_pretrained(model_name)
+    test_model = AutoModelForCausalLM.from_pretrained(model_name)
+    test_generator = pipeline('text-generation', model=test_model, tokenizer=test_tokenizer)
+    LOCAL_LLM_AVAILABLE = True
+    del test_tokenizer, test_model, test_generator  # Clean up
+except Exception as e:
+    logger.warning(f"Transformers not available or not working properly: {str(e)}. Local LLM will not work.")
+    logger.warning("This is often due to PyTorch compatibility issues on Windows.")
+
 
 class GenerationService:
     def __init__(self):
-        if not settings.COHERE_API_KEY:
-            raise ValueError("COHERE_API_KEY environment variable is required")
+        # Check if we should use local LLM
+        if settings.LANGUAGE_MODEL_PROVIDER == 'local' and LOCAL_LLM_AVAILABLE:
+            self.use_local = True
+            # Use a lightweight model for local generation
+            model_name = "microsoft/DialoGPT-small"  # Using a smaller, faster model
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.model = AutoModelForCausalLM.from_pretrained(model_name)
+                # Create a text generation pipeline
+                self.generator = pipeline('text-generation', model=self.model, tokenizer=self.tokenizer)
+                logger.info("Using local LLM model")
+            except Exception as e:
+                logger.error(f"Failed to load local model: {e}")
+                raise ValueError("Failed to initialize local LLM. Please check your installation.")
+        elif settings.COHERE_API_KEY and settings.COHERE_API_KEY.strip():
+            self.use_local = False
+            self.client = cohere.Client(settings.COHERE_API_KEY)
+            self.model = None
 
-        self.client = cohere.Client(settings.COHERE_API_KEY)
-        # Use the command model which is typically available in most Cohere tiers
-        # If your specific Cohere plan doesn't have access to "command", you may need
-        # to upgrade your plan or use a different model that's available to your account
-        self.model = "command"  # Standard model that is typically available to most users
-        print(f"Using Cohere model: {self.model}")
+            # Try the most current Cohere models
+            # Based on the error message, older models were removed on September 15, 2025
+            # Current models might be different - let's try the newer ones
+            # According to Cohere docs, current models might include "command", "command-light", etc.
+            # But since those were also removed, let's try the embed models as a test
+            available_models_to_try = ["command", "command-light", "c4ai-aya-expanse-8b", "c4ai-aya-expanse-32b"]
+
+            for model_name in available_models_to_try:
+                try:
+                    # Test if the model is available by making a simple call
+                    response = self.client.chat(
+                        message="test",
+                        model=model_name,
+                        max_tokens=1,
+                        temperature=0.0
+                    )
+                    self.model = model_name
+                    logger.info(f"Successfully verified Cohere model: {self.model}")
+                    break  # Exit the loop if a model works
+                except Exception as e:
+                    logger.warning(f"Model {model_name} not available: {str(e)}")
+                    continue  # Try the next model
+
+            if self.model is None:
+                logger.warning("No preferred Cohere models available, falling back to local model")
+                self.use_local = True
+                model_name = "microsoft/DialoGPT-small"
+                try:
+                    from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                    self.model = AutoModelForCausalLM.from_pretrained(model_name)
+                    self.generator = pipeline('text-generation', model=self.model, tokenizer=self.tokenizer)
+                    logger.info("Using local LLM model as fallback")
+                except Exception as e:
+                    logger.error(f"Failed to load local model: {e}")
+                    # If local model fails, use basic fallback
+                    logger.warning("No generation service available. Using basic fallback response.")
+                    self.use_local = False  # Not actually using local, but flagging for fallback
+                    self.fallback_mode = True  # Flag to indicate fallback mode
+                    self.model = "fallback-model"  # For logging purposes
+            else:
+                logger.info(f"Using Cohere model: {self.model}")
+        else:
+            # Default to local if available, otherwise use fallback
+            if LOCAL_LLM_AVAILABLE:
+                self.use_local = True
+                model_name = "microsoft/DialoGPT-small"
+                try:
+                    from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                    self.model = AutoModelForCausalLM.from_pretrained(model_name)
+                    self.generator = pipeline('text-generation', model=self.model, tokenizer=self.tokenizer)
+                    logger.info("Using local LLM model as fallback")
+                except Exception as e:
+                    logger.error(f"Failed to load local model: {e}")
+                    # If local model fails, use basic fallback
+                    logger.warning("No generation service available. Using basic fallback response.")
+                    self.use_local = False  # Not actually using local, but flagging for fallback
+                    self.fallback_mode = True  # Flag to indicate fallback mode
+                    self.model = "fallback-model"  # For logging purposes
+            else:
+                # If no services are available, provide a basic fallback that returns a message
+                logger.warning("No generation service available. Using basic fallback response.")
+                self.use_local = False  # Not actually using local, but flagging for fallback
+                self.fallback_mode = True  # Flag to indicate fallback mode
+                self.model = "fallback-model"  # For logging purposes
     
     def generate_answer(
         self,
@@ -37,6 +130,35 @@ class GenerationService:
             Dictionary with answer and citations
         """
         try:
+            # Check if we're in fallback mode
+            if hasattr(self, 'fallback_mode') and self.fallback_mode:
+                # Return a basic response indicating the system is not fully functional
+                answer = (
+                    "The system is currently running in fallback mode because no generation service is available. "
+                    "Please configure either a Cohere API key or install the required dependencies for local models. "
+                    f"Query received: '{query}'"
+                )
+                citations = []
+                for chunk in context:
+                    citations.append({
+                        "text": chunk['text'][:100] + "..." if len(chunk['text']) > 100 else chunk['text'],
+                        "chapter": chunk.get('metadata', {}).get('chapter', 'Unknown'),
+                        "page": chunk.get('metadata', {}).get('page', 'Unknown'),
+                        "paragraph": chunk.get('metadata', {}).get('paragraph', 'Unknown'),
+                        "relevance_score": chunk.get('relevance_score', 0.0),
+                        "validated": True
+                    })
+
+                result = {
+                    "answer": answer,
+                    "citations": citations,
+                    "context_used": len(context),
+                    "model": "fallback-model"
+                }
+
+                logger.info("Generated fallback response")
+                return result
+
             # Build the context text from the retrieved chunks
             context_texts = []
             citations = []
@@ -57,38 +179,64 @@ class GenerationService:
 
             context_str = "\n\n".join(context_texts)
 
-            # Create the system prompt based on the mode
-            if mode == "selected_text_only":
-                preamble = (
-                    "You are a helpful assistant that answers questions based ONLY on the provided selected text. "
-                    "Do not use any external knowledge or make assumptions beyond what is explicitly stated in the selected text. "
-                    "If the answer is not available in the provided selected text, respond with: "
-                    "\"The answer is not available in the provided text.\""
-                )
-            else:  # full_book mode
-                preamble = (
-                    "You are a helpful assistant that answers questions based ONLY on the provided book content. "
-                    "Do not use any external knowledge or make assumptions beyond what is explicitly stated in the provided content. "
-                    "Always cite the specific passages you use to answer the question."
+            if self.use_local:
+                # Use local model for generation
+                # For local models, we'll format the prompt differently
+                if context_str:
+                    prompt = f"Based on the following context, answer the question:\n\n{context_str}\n\nQuestion: {query}\n\nAnswer:"
+                else:
+                    prompt = f"Answer the following question: {query}\n\nAnswer:"
+
+                # Generate response using local model
+                response = self.generator(
+                    prompt,
+                    max_length=300,  # Limit response length
+                    num_return_sequences=1,
+                    temperature=temperature,
+                    pad_token_id=self.tokenizer.eos_token_id
                 )
 
-            # Create the full message for Cohere
-            if context_str:
-                message = f"Context:\n{context_str}\n\nQuestion: {query}"
+                # Extract the answer from the response
+                full_text = response[0]['generated_text']
+                # Extract just the answer part (after the prompt)
+                if 'Answer:' in full_text:
+                    answer = full_text.split('Answer:')[1].strip()
+                else:
+                    answer = full_text[len(prompt):].strip()
             else:
-                message = f"Question: {query}"
+                # Use Cohere API
+                # Create the system prompt based on the mode
+                if mode == "selected_text_only":
+                    preamble = (
+                        "You are a helpful assistant that answers questions based ONLY on the provided selected text. "
+                        "Do not use any external knowledge or make assumptions beyond what is explicitly stated in the selected text. "
+                        "If the answer is not available in the provided selected text, respond with: "
+                        "\"The answer is not available in the provided text.\""
+                    )
+                else:  # full_book mode
+                    preamble = (
+                        "You are a helpful assistant that answers questions based ONLY on the provided book content. "
+                        "Do not use any external knowledge or make assumptions beyond what is explicitly stated in the provided content. "
+                        "Always cite the specific passages you use to answer the question."
+                    )
 
-            # Make the API call to Cohere
-            response = self.client.chat(
-                message=message,
-                preamble=preamble,
-                model=self.model,
-                temperature=temperature,
-                max_tokens=500,  # Adjust based on expected answer length
-            )
+                # Create the full message for Cohere
+                if context_str:
+                    message = f"Context:\n{context_str}\n\nQuestion: {query}"
+                else:
+                    message = f"Question: {query}"
 
-            # Extract the answer
-            answer = response.text.strip()
+                # Make the API call to Cohere
+                response = self.client.chat(
+                    message=message,
+                    preamble=preamble,
+                    model=self.model,
+                    temperature=temperature,
+                    max_tokens=500,  # Adjust based on expected answer length
+                )
+
+                # Extract the answer
+                answer = response.text.strip()
 
             # Check if the answer indicates insufficient context
             if "answer is not available in the provided text" in answer.lower():
@@ -102,10 +250,10 @@ class GenerationService:
                 "answer": answer,
                 "citations": validated_citations,
                 "context_used": len(context),
-                "model": self.model
+                "model": self.model if not self.use_local else "local-dialogpt"
             }
 
-            logger.info(f"Generated answer with model {self.model}")
+            logger.info(f"Generated answer with {'local' if self.use_local else 'Cohere'} model")
             return result
         except Exception as e:
             logger.error(f"Error generating answer: {str(e)}")
@@ -115,7 +263,7 @@ class GenerationService:
                     "answer": "Model not available with your current Cohere plan. Please check your Cohere dashboard for available models.",
                     "citations": [],
                     "context_used": 0,
-                    "model": self.model
+                    "model": self.model if not self.use_local else "local-dialogpt"
                 }
             raise
     

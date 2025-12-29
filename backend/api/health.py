@@ -54,7 +54,7 @@ async def health_check():
 
     try:
         # Check embedding service
-        test_embedding = embedding_service.encode_single("health check")
+        test_embedding = embedding_service.create_embedding("health check")
         checks["checks"]["embedding_service"] = {
             "status": "healthy",
             "embedding_length": len(test_embedding) if test_embedding else 0
@@ -137,7 +137,7 @@ async def deep_health_check():
         # Test embedding generation
         vector_db_service, embedding_service = get_services()
         test_text = "This is a test for health check"
-        embedding = embedding_service.encode_single(test_text)
+        embedding = embedding_service.create_embedding(test_text)
 
         results["tests"]["embedding_generation"] = {
             "status": "passed",

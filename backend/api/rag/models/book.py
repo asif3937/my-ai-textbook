@@ -52,7 +52,7 @@ class Book(Base):
     title = Column(String(500), nullable=False)
     author = Column(String(200), nullable=False)
     content_preview = Column(Text)  # Store a preview of the content
-    metadata = Column(String)  # Store as JSON string
+    book_metadata = Column(String)  # Store as JSON string (renamed from 'metadata' to avoid SQLAlchemy conflict)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

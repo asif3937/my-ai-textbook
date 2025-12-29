@@ -1,0 +1,18 @@
+{
+  "name": "my-ai-textbook-backend",
+  "version": "1.0.0",
+  "description": "Backend API for the AI Textbook RAG Chatbot",
+  "main": "main.py",
+  "scripts": {
+    "start": "uvicorn main:app --host 0.0.0.0 --port 8000",
+    "dev": "uvicorn main:app --reload",
+    "ingest-textbook": "python ingest_real_textbook.py"
+  },
+  "keywords": ["rag", "chatbot", "ai", "textbook"],
+  "author": "AI Textbook Team",
+  "license": "MIT",
+  "dependencies": {
+    "fastapi": "^0.104.1",
+    "uvicorn": "^0.24.0"
+  }
+}

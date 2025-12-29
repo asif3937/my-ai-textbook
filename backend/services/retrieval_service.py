@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import requests
 from services.qdrant_service import QdrantService
 from services.embedding_service import EmbeddingService
 from config.settings import settings
@@ -8,55 +9,88 @@ import uuid
 
 class RetrievalService:
     def __init__(self):
-        self.qdrant_service = QdrantService()
+        # Initialize services but don't connect to Qdrant immediately
+        # Qdrant connection will be established when first needed
+        self.qdrant_service = None
         self.embedding_service = EmbeddingService()
         self.collection_name = "book_content_chunks"
+        self._qdrant_initialized = False
+
+    def _ensure_qdrant_connection(self):
+        """Ensure Qdrant connection is established"""
+        if not self._qdrant_initialized:
+            try:
+                self.qdrant_service = QdrantService()
+                # Try to ping the Qdrant server to ensure it's available
+                logger.info("Testing Qdrant connection...")
+                # Test the connection by attempting to list collections
+                # For REST API, we'll need to make a direct call to the collections endpoint
+                if self.qdrant_service.use_rest_api:
+                    # Use the search_vectors method which will test the connection
+                    # We'll pass empty query to test connection
+                    collections_response = requests.get(f"{self.qdrant_service.qdrant_url}/collections")
+                    if collections_response.status_code == 200:
+                        collections_data = collections_response.json()
+                        logger.info(f"Successfully connected to Qdrant via REST API. Found {len(collections_data['result']['collections'])} collections.")
+                    else:
+                        raise Exception(f"REST API connection failed with status {collections_response.status_code}")
+                else:
+                    # Use gRPC client
+                    collections = self.qdrant_service.client.get_collections()
+                    logger.info(f"Successfully connected to Qdrant. Found {len(collections.collections)} collections.")
+                self._qdrant_initialized = True
+            except Exception as e:
+                logger.error(f"Failed to connect to Qdrant: {str(e)}")
+                logger.warning("Qdrant connection failed. Please ensure Qdrant server is running at the specified URL.")
+                raise
     
     def initialize_collection(self) -> bool:
         """Initialize the Qdrant collection if it doesn't exist"""
         try:
+            self._ensure_qdrant_connection()
             # Create collection with appropriate vector size for Cohere embeddings
             # Cohere's embed-english-v3.0 produces 1024-dimensional vectors by default
             success = self.qdrant_service.create_collection(
                 collection_name=self.collection_name,
                 vector_size=1024  # Default size for Cohere embeddings
             )
-            
+
             if success:
                 logger.info(f"Qdrant collection '{self.collection_name}' initialized successfully")
             else:
                 logger.warning(f"Failed to initialize Qdrant collection '{self.collection_name}'")
-            
+
             return success
         except Exception as e:
             logger.error(f"Error initializing Qdrant collection: {str(e)}")
             return False
     
     def store_content_chunks(
-        self, 
-        chunks: List[Dict[str, Any]], 
+        self,
+        chunks: List[Dict[str, Any]],
         book_id: str
     ) -> List[str]:
         """
         Store content chunks in the vector database
-        
+
         Args:
             chunks: List of chunks, each with 'text' and metadata
             book_id: ID of the book these chunks belong to
-        
+
         Returns:
             List of IDs of the stored vectors
         """
         try:
+            self._ensure_qdrant_connection()
             # Extract texts for embedding
             texts = [chunk['text'] for chunk in chunks]
-            
+
             # Create embeddings
             embeddings = self.embedding_service.create_embeddings(
-                texts, 
+                texts,
                 input_type="search_document"
             )
-            
+
             # Prepare payloads with metadata
             payloads = []
             for chunk in chunks:
@@ -67,10 +101,10 @@ class RetrievalService:
                     **chunk.get('metadata', {})
                 }
                 payloads.append(payload)
-            
+
             # Generate IDs for the vectors
             vector_ids = [str(uuid.uuid4()) for _ in embeddings]
-            
+
             # Store in Qdrant
             stored_ids = self.qdrant_service.upsert_vectors(
                 collection_name=self.collection_name,
@@ -78,7 +112,7 @@ class RetrievalService:
                 payloads=payloads,
                 ids=vector_ids
             )
-            
+
             logger.info(f"Stored {len(stored_ids)} content chunks for book {book_id}")
             return stored_ids
         except Exception as e:
@@ -93,27 +127,28 @@ class RetrievalService:
     ) -> List[Dict[str, Any]]:
         """
         Retrieve the most relevant chunks for a query
-        
+
         Args:
             query: The user's query
             book_id: Optional book ID to filter results
             top_k: Number of top results to return
-        
+
         Returns:
             List of relevant chunks with metadata
         """
         try:
+            self._ensure_qdrant_connection()
             # Create embedding for the query
             query_embedding = self.embedding_service.create_embedding(
-                query, 
+                query,
                 input_type="search_query"
             )
-            
+
             # Prepare filters if book_id is provided
             filters = {}
             if book_id:
                 filters['book_id'] = book_id
-            
+
             # Search in Qdrant
             results = self.qdrant_service.search_vectors(
                 collection_name=self.collection_name,
@@ -121,7 +156,7 @@ class RetrievalService:
                 limit=top_k,
                 filters=filters if filters else None
             )
-            
+
             # Format results
             relevant_chunks = []
             for result in results:
@@ -132,7 +167,7 @@ class RetrievalService:
                     'relevance_score': result.score
                 }
                 relevant_chunks.append(chunk_info)
-            
+
             logger.info(f"Retrieved {len(relevant_chunks)} relevant chunks for query")
             return relevant_chunks
         except Exception as e:
@@ -145,10 +180,10 @@ class RetrievalService:
     ) -> List[Dict[str, Any]]:
         """
         Retrieve context specifically for selected text only mode
-        
+
         Args:
             selected_text: The user-selected text
-            
+
         Returns:
             List with the selected text as the only context
         """
@@ -161,7 +196,7 @@ class RetrievalService:
                 'metadata': {'source': 'user_selection'},
                 'relevance_score': 1.0  # Perfect relevance since it's the selected text
             }]
-            
+
             logger.info("Prepared context for selected text only mode")
             return context
         except Exception as e:

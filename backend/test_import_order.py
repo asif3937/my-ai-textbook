@@ -33,10 +33,9 @@ def test_settings_isolated():
         from config.settings import settings
         print(f"Settings LOG_LEVEL: {settings.LOG_LEVEL}")
         print("Settings loaded successfully!")
-        return True
     except Exception as e:
         print(f"Error loading settings: {e}")
-        return False
+        assert False, f"Error loading settings: {e}"
 
 def test_utils_isolated():
     """Test utils in isolation (but after settings)"""
@@ -45,15 +44,14 @@ def test_utils_isolated():
         # First make sure settings are loaded
         from config.settings import settings
         print(f"Settings loaded, LOG_LEVEL: {settings.LOG_LEVEL}")
-        
+
         # Then try to import utils
         from utils import logger
         print(f"Utils loaded, logger: {logger.name}")
         print("Utils loaded successfully!")
-        return True
     except Exception as e:
         print(f"Error loading utils: {e}")
-        return False
+        assert False, f"Error loading utils: {e}"
 
 def test_api_rag():
     """Test the api rag module (which was causing the issue)"""
@@ -62,19 +60,18 @@ def test_api_rag():
         # Explicit order of imports
         from config.settings import settings
         print(f"Settings: LOG_LEVEL = {settings.LOG_LEVEL}")
-        
+
         from utils import logger
         print(f"Logger loaded: {logger.name}")
-        
+
         # Now try to import the module that was failing
         import api.rag
         print("api.rag loaded successfully!")
-        return True
     except Exception as e:
         print(f"Error loading api.rag: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"Error loading api.rag: {e}"
 
 if __name__ == "__main__":
     print("Testing module import in correct order...\n")

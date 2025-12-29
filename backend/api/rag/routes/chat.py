@@ -5,8 +5,10 @@ import uuid
 import json
 from models import Session as SessionModel  # Renaming to avoid conflict with SQLAlchemy Session
 from config.database import get_db
+from config.settings import settings
 from services.retrieval_service import RetrievalService
 from services.generation_service import GenerationService
+from api.rag.services.assistant_generation_service import AssistantGenerationService
 from services.book_content_service import BookContentService
 from utils import logger, InvalidInputError, BookNotFoundError, ContentNotFoundError
 from pydantic import BaseModel, Field
@@ -18,52 +20,57 @@ router = APIRouter()
 
 # Request/Response Models
 class IngestBookRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=500)
-    author: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=10)
-    metadata: Optional[dict] = None
+    title: str = Field(..., min_length=1, max_length=500, example="Introduction to Machine Learning")
+    author: str = Field(..., min_length=1, max_length=200, example="John Doe")
+    content: str = Field(..., min_length=10, example="This is the full text content of the book...")
+    metadata: Optional[dict] = Field(None, example={"isbn": "1234567890", "year": 2023, "publisher": "Tech Publications"})
 
 
 class IngestBookResponse(BaseModel):
-    book_id: str
-    title: str
-    status: str
-    message: str
+    book_id: str = Field(..., example="550e8400-e29b-41d4-a716-446655440000", description="Unique identifier for the ingested book")
+    title: str = Field(..., example="Introduction to Machine Learning")
+    status: str = Field(..., example="success", description="Status of the ingestion process")
+    message: str = Field(..., example="Book content successfully ingested and indexed")
 
 
 class ChatRequest(BaseModel):
-    session_id: str
-    query: str = Field(..., min_length=1, max_length=2000)
-    mode: str = Field("full_book", pattern="^(full_book|selected_text_only)$")
-    selected_text: Optional[str] = Field(None, max_length=5000)
-    book_id: str
+    session_id: str = Field(..., example="123e4567-e89b-12d3-a456-426614174000", description="Unique session identifier (UUID)")
+    query: str = Field(..., min_length=1, max_length=2000, example="What is the main concept discussed in this chapter?")
+    mode: str = Field("full_book", pattern="^(full_book|selected_text_only)$", example="full_book", description="Retrieval mode: 'full_book' for searching entire book, 'selected_text_only' for using only provided selected_text")
+    selected_text: Optional[str] = Field(None, max_length=5000, example="This is a specific text selection that the user has highlighted")
+    book_id: str = Field(..., example="987e6543-e21b-45dc-a345-987654321098", description="Unique book identifier (UUID)")
 
 
 class ChatResponse(BaseModel):
-    session_id: str
-    response_id: str
-    answer: str
-    citations: list
-    mode: str
-    timestamp: str
+    session_id: str = Field(..., example="123e4567-e89b-12d3-a456-426614174000")
+    response_id: str = Field(..., example="8f3b1234-5678-90ab-cdef-123456789012")
+    answer: str = Field(..., example="The main concept discussed in this chapter is supervised learning, which involves training models on labeled data...")
+    citations: list = Field(..., example=[{"text": "Supervised learning uses labeled training data", "chapter": "Chapter 3", "page": "45", "relevance_score": 0.95}])
+    mode: str = Field(..., example="full_book")
+    timestamp: str = Field(..., example="2023-10-01T12:00:00.000000")
 
 
 class CreateSessionRequest(BaseModel):
-    user_id: Optional[str] = None
-    book_id: str
-    session_metadata: Optional[dict] = None
+    user_id: Optional[str] = Field(None, example="user123", description="Optional user identifier")
+    book_id: str = Field(..., example="987e6543-e21b-45dc-a345-987654321098", description="Book identifier for the session")
+    session_metadata: Optional[dict] = Field(None, example={"session_type": "study_session", "preferences": {"difficulty": "beginner"}})
 
 
 class CreateSessionResponse(BaseModel):
-    session_id: str
-    created_at: str
-    status: str
+    session_id: str = Field(..., example="123e4567-e89b-12d3-a456-426614174000")
+    created_at: str = Field(..., example="2023-10-01T12:00:00.000000")
+    status: str = Field(..., example="active")
 
 
 # Initialize services
 retrieval_service = RetrievalService()
-generation_service = GenerationService()
 book_content_service = BookContentService()
+
+# Initialize generation service based on configuration
+if settings.LANGUAGE_MODEL_PROVIDER.lower() == 'openai_assistant':
+    generation_service = AssistantGenerationService()
+else:
+    generation_service = GenerationService()
 
 
 @router.post("/books/ingest", response_model=IngestBookResponse)
@@ -114,9 +121,10 @@ def chat_with_book(
 
         if not session_record:
             # Create a new session if one doesn't exist
-            # The user_id should be separate from session_id - we'll set it to None or generate if needed
+            # The user_id should be separate from session_id - we'll set it to None
+
+            # Explicitly set user_id to None to ensure it's not accidentally assigned a string value
             user_id = None
-            # We're not using the request.session_id as user_id since they serve different purposes
 
             session_record = SessionModel(
                 id=session_uuid,
@@ -125,6 +133,7 @@ def chat_with_book(
             )
             db.add(session_record)
             db.commit()
+            db.refresh(session_record)  # Refresh to get the created_at timestamp
 
         # Validate book exists
         try:

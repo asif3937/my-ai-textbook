@@ -2,37 +2,74 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from typing import List, Optional
 import logging
+import requests
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 class VectorDBService:
     def __init__(self):
-        self.client = QdrantClient(
-            url=settings.QDRANT_URL,
-            api_key=settings.QDRANT_API_KEY,
-            prefer_grpc=True
-        )
+        # Check if we should use REST API directly to avoid gRPC issues
+        if settings.QDRANT_API_KEY and settings.QDRANT_API_KEY.strip():
+            # Using cloud instance with API key, can use gRPC
+            self.client = QdrantClient(
+                url=settings.QDRANT_URL,
+                api_key=settings.QDRANT_API_KEY,
+                prefer_grpc=True
+            )
+            self.use_rest_api = False
+        else:
+            # For local instance, use REST API directly to avoid gRPC issues
+            self.qdrant_url = settings.QDRANT_URL
+            self.use_rest_api = True
+            # Initialize a dummy client just for type compatibility
+            # We'll use REST API directly
+            self.client = None
+
         self.collection_name = settings.QDRANT_COLLECTION_NAME
         self._init_collection()
 
     def _init_collection(self):
         """Initialize the Qdrant collection if it doesn't exist"""
         try:
-            collections = self.client.get_collections()
-            collection_exists = any(col.name == self.collection_name for col in collections.collections)
+            if self.use_rest_api:
+                # Use REST API directly
+                url = f"{self.qdrant_url}/collections/{self.collection_name}"
 
-            if not collection_exists:
-                self.client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=models.VectorParams(
-                        size=settings.EMBEDDING_DIMENSION,
-                        distance=models.Distance.COSINE
-                    )
-                )
-                logger.info(f"Created collection: {self.collection_name}")
+                payload = {
+                    "vectors": {
+                        "size": settings.EMBEDDING_DIMENSION,
+                        "distance": "Cosine"
+                    }
+                }
+
+                try:
+                    response = requests.put(url, json=payload)
+                    if response.status_code == 200:
+                        logger.info(f"Created collection: {self.collection_name}")
+                    elif response.status_code == 409:  # Collection already exists
+                        logger.info(f"Collection {self.collection_name} already exists")
+                    else:
+                        logger.error(f"Error creating collection: {response.text}")
+                        raise Exception(f"Failed to create collection: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error connecting to Qdrant via REST: {e}")
+                    raise
             else:
-                logger.info(f"Collection {self.collection_name} already exists")
+                collections = self.client.get_collections()
+                collection_exists = any(col.name == self.collection_name for col in collections.collections)
+
+                if not collection_exists:
+                    self.client.create_collection(
+                        collection_name=self.collection_name,
+                        vectors_config=models.VectorParams(
+                            size=settings.EMBEDDING_DIMENSION,
+                            distance=models.Distance.COSINE
+                        )
+                    )
+                    logger.info(f"Created collection: {self.collection_name}")
+                else:
+                    logger.info(f"Collection {self.collection_name} already exists")
         except Exception as e:
             logger.error(f"Error initializing collection: {e}")
             raise

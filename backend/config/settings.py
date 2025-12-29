@@ -2,6 +2,10 @@ from pydantic_settings import BaseSettings
 from typing import List, Optional
 import os
 
+# Load environment variables from .env file, overriding system variables
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 class Settings(BaseSettings):
     # Application settings
     APP_NAME: str = "AI Textbook RAG API"
@@ -16,7 +20,7 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: Optional[str] = os.getenv("QDRANT_API_KEY")
     QDRANT_COLLECTION_NAME: str = os.getenv("QDRANT_COLLECTION_NAME", "textbook_content")
 
-    NEON_DATABASE_URL: str = os.getenv("NEON_DATABASE_URL", "postgresql://user:password@localhost:5432/textbook_db")
+    NEON_DATABASE_URL: str = os.getenv("NEON_DATABASE_URL", "sqlite:///./rag_chatbot.db")
 
     # Embedding settings
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
@@ -27,7 +31,11 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     COHERE_API_KEY: str = os.getenv("COHERE_API_KEY", "")
-    LANGUAGE_MODEL_PROVIDER: str = os.getenv("LANGUAGE_MODEL_PROVIDER", "openai")  # Can be 'openai' or 'cohere'
+    LANGUAGE_MODEL_PROVIDER: str = os.getenv("LANGUAGE_MODEL_PROVIDER", "local")  # Can be 'openai', 'cohere', 'openai_assistant', or 'local'
+
+    # OpenAI Assistant settings
+    OPENAI_ASSISTANT_ID: Optional[str] = os.getenv("OPENAI_ASSISTANT_ID", None)  # Pre-existing assistant ID
+    DEFAULT_RAG_MODE: str = os.getenv("DEFAULT_RAG_MODE", "full_book")  # Default RAG mode for assistants
 
     # API settings
     ALLOWED_ORIGINS: List[str] = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")

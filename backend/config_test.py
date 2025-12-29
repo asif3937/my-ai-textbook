@@ -20,7 +20,6 @@ def test_settings():
     assert hasattr(settings, 'EMBEDDING_DIMENSION'), "EMBEDDING_DIMENSION not found"
 
     print(f"[OK] All settings attributes accessible. LOG_LEVEL = {settings.LOG_LEVEL}")
-    return True
 
 def test_main_import_without_services():
     """Test that main can be imported without loading heavy services"""
@@ -38,20 +37,18 @@ def test_main_import_without_services():
     try:
         from main import app
         print("[OK] Main app imported successfully (with mocked services)")
-        return True
     except ImportError as e:
         print(f"[ERROR] Failed to import main: {e}")
-        return False
+        assert False, f"Failed to import main: {e}"
 
 def test_models():
     """Test that models can be imported"""
     try:
         from models import BookContent, Session, ContentChunk, ChatHistory
         print("[OK] All models imported successfully")
-        return True
     except Exception as e:
         print(f"[ERROR] Failed to import models: {e}")
-        return False
+        assert False, f"Failed to import models: {e}"
 
 if __name__ == "__main__":
     print("Running configuration tests...\n")

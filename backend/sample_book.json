@@ -1,0 +1,10 @@
+{
+  "title": "Introduction to Machine Learning",
+  "author": "Test Author",
+  "content": "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data, identify patterns and make decisions with minimal human intervention. \n\nSupervised learning is a type of machine learning where the model is trained on labeled data. The algorithm learns to map inputs to outputs based on example input-output pairs. Common supervised learning algorithms include linear regression, logistic regression, and neural networks. \n\nUnsupervised learning is used when the data is not labeled. The system tries to learn the patterns and structure from the data without supervision. Clustering and association are common unsupervised learning techniques. \n\nDeep learning is a subset of machine learning that uses neural networks with many layers. It has revolutionized fields like computer vision, natural language processing, and speech recognition. \n\nReinforcement learning is a type of machine learning where an agent learns to make decisions by performing actions in an environment to maximize a reward signal. It has been successfully applied in game playing, robotics, and autonomous systems.",
+  "metadata": {
+    "isbn": "978-1234567890",
+    "year": 2023,
+    "publisher": "Test Publisher"
+  }
+}

@@ -14,12 +14,11 @@ def test_full_import():
     try:
         from main import app
         print("[SUCCESS] Main app imported successfully")
-        return True
     except Exception as e:
         print(f"[ERROR] Failed to import main app: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"Failed to import main app: {e}"
 
 if __name__ == "__main__":
     test_full_import()

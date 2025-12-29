@@ -1,183 +1,136 @@
-# AI Textbook RAG Backend
+# AI Textbook RAG Chatbot - Fullstack Implementation
 
-This project implements a Retrieval-Augmented Generation (RAG) chatbot that answers questions based strictly on book content, with support for selected-text-only mode and full-book RAG mode. The system enforces strict grounding in book content, preventing hallucinations and providing citations for all responses.
+This project implements a RAG (Retrieval-Augmented Generation) chatbot that connects to your textbook content. The system consists of a backend API and a frontend Docusaurus site with an integrated AI chat interface.
 
-## Features
+## Security Notice
 
-- **Book-Aware Question Answering**: Answer questions using retrieved passages from the book
-- **Selected-Text-Only Mode**: When the user selects text, the chatbot uses only that selection as context
-- **Full-Book RAG Mode**: Retrieve relevant chunks from the entire book when no text is selected
-- **Explainability**: Responses include citations to the source passages
-- **Security**: All credentials loaded via environment variables
+⚠️ **IMPORTANT**: This project contains sensitive configuration that must be properly secured before public deployment. Please read the [SECURITY.md](./SECURITY.md) file for complete security guidelines.
 
-## Architecture
+## Project Structure
 
-The backend consists of:
-- **FastAPI**: Web framework for the API
-- **Qdrant**: Vector database for document storage and similarity search
-- **Cohere**: For generating text embeddings
-- **OpenAI**: For response generation
-- **PostgreSQL**: For session and metadata storage
+- `backend/` - FastAPI backend with RAG functionality
+- `textbook/` - Docusaurus frontend with AI Chat integration
 
 ## Prerequisites
 
-- Python 3.9+
-- Access to Qdrant Cloud
-- API keys for Cohere and OpenAI
-- PostgreSQL database (Neon recommended)
+- Node.js (v16 or higher)
+- Python (v3.8 or higher)
+- Access to Cohere API key (for embeddings)
+- Access to Qdrant vector database
+- PostgreSQL database (Neon)
 
-## Setup
+## Backend Setup
 
-### Prerequisites
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
 
-- Python 3.9+
-- Docker and Docker Compose (for local development)
-- Qdrant instance (local or cloud)
-- PostgreSQL database (Neon or local)
+2. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   # or if using the basic requirements
+   pip install -r requirements-basic.txt
+   ```
 
-### Installation
+3. **Security Setup**: Create a `.env` file in the backend directory with your actual credentials (do NOT commit this file):
+   ```env
+   # Database Configuration
+   NEON_DATABASE_URL=your_neon_database_url_here
 
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+   # Vector Database Configuration
+   QDRANT_URL=your_qdrant_url_here
+   QDRANT_API_KEY=your_qdrant_api_key_here
+   QDRANT_COLLECTION_NAME=book_content_chunks
 
-2. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
+   # Embeddings and AI Services
+   COHERE_API_KEY=your_cohere_api_key_here
+   OPENAI_API_KEY=your_openai_api_key_here
 
-3. Run with Docker Compose (for local development):
-```bash
-docker-compose up
-```
+   # LLM Configuration
+   LLM_MODEL=gpt-3.5-turbo
+   LANGUAGE_MODEL_PROVIDER=cohere
 
-### Environment Variables
+   # Application Configuration
+   SECRET_KEY=your_secret_key_here
+   DEBUG=true
+   ```
 
-- `NEON_DATABASE_URL`: PostgreSQL connection string
-- `QDRANT_CLUSTER_ENDPOINT`: Qdrant Cloud endpoint
-- `QDRANT_API_KEY`: Qdrant API key
-- `COHERE_API_KEY`: API key for Cohere embeddings
-- `OPENAI_API_KEY`: API key for OpenAI generation
-- `SECRET_KEY`: Secret key for security
-- `DEBUG`: Enable/disable debug mode (default: false)
-- `LOG_LEVEL`: Set the logging level (default: INFO)
+4. Start the backend server:
+   ```bash
+   python -m uvicorn main:app --reload
+   ```
+   The backend will be available at `http://127.0.0.1:8000`
+
+## Frontend Setup
+
+1. Navigate to the textbook directory:
+   ```bash
+   cd textbook  # from the root of the project
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run start
+   ```
+   The frontend will be available at `http://localhost:3000`
+
+## Book Ingestion
+
+Before using the chatbot, you need to ingest your textbook content:
+
+1. Make sure your backend server is running
+2. Run the ingestion script:
+   ```bash
+   python ingest_real_textbook.py
+   ```
+   This will read your textbook content from the `textbook/docs` directory and ingest it into the RAG system
+
+The default book ID for your textbook is: `bd8add9a-3444-4a7d-978b-ca0952c59bca`
+
+## Using the AI Chat
+
+1. Access the AI Chat through the "AI Chat" link in the navigation bar
+2. Type your questions about the textbook content
+3. The AI assistant will retrieve relevant information from your textbook and generate responses
 
 ## API Endpoints
 
-- `GET /`: Root endpoint
-- `POST /api/v1/chat`: Main chat endpoint with RAG capabilities
-- `POST /api/v1/books/ingest`: Ingest book content for RAG
-- `POST /api/v1/sessions`: Create new chat sessions
-- `GET /api/v1/health`: Health check
-- `GET /api/v1/live`: Liveness check
+- `POST /api/v1/chat` - Chat with the RAG system
+- `POST /api/v1/books/ingest` - Ingest new book content
+- `POST /api/v1/sessions` - Create a new chat session
 
-## Running the Service
+## Security Guidelines
 
-### Local Development
+For complete security guidelines, please read the [SECURITY.md](./SECURITY.md) file which explains:
+- How credentials are protected
+- Best practices for environment variables
+- What files are excluded from Git
+- How to properly set up for public deployment
 
-1. Run the FastAPI server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+## Troubleshooting
 
-2. The API will be available at `http://localhost:8000`
+1. **Backend not responding**: Make sure the backend server is running on `http://127.0.0.1:8000`
+2. **No responses**: Verify that your textbook content has been properly ingested
+3. **API key errors**: Check that your Cohere and Qdrant API keys are valid
+4. **Database errors**: Ensure your Neon database connection is working
 
-### Using Docker
+## Production Deployment
 
-1. Build the Docker image:
-   ```bash
-   docker build -t rag-chatbot .
-   ```
+For production deployment:
 
-2. Run the container:
-   ```bash
-   docker run -p 8000:8000 --env-file .env rag-chatbot
-   ```
+1. Update the `url` in `docusaurus.config.ts` to your production domain
+2. Set up environment variables for your hosting platform (do not commit actual credentials)
+3. Build the frontend: `npm run build`
+4. Deploy the build output to your hosting service
+5. Deploy the backend to a service like Railway, Render, or AWS
+6. Follow security guidelines in [SECURITY.md](./SECURITY.md)
 
-## API Usage
+## Default Book ID
 
-### Initial Book Content Setup
-
-1. Prepare your book content in text format
-2. Use the content ingestion endpoint to add the book to the system:
-   ```bash
-   curl -X POST http://localhost:8000/api/v1/books/ingest \
-     -H "Content-Type: application/json" \
-     -d '{
-       "title": "My Book Title",
-       "author": "Author Name",
-       "content": "Full book content as text..."
-     }'
-   ```
-
-### Using the Chat API
-
-#### Full-Book RAG Mode
-
-Query the system without specifying selected text:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "unique-session-id",
-    "query": "What is the main theme of this book?",
-    "mode": "full_book",
-    "book_id": "unique-book-id"
-  }'
-```
-
-#### Selected-Text-Only Mode
-
-Query the system with selected text:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "unique-session-id",
-    "query": "Explain this concept in more detail",
-    "mode": "selected_text_only",
-    "selected_text": "The concept of RAG involves retrieval augmented generation...",
-    "book_id": "unique-book-id"
-  }'
-```
-
-## API Documentation
-
-- Interactive API documentation available at `http://localhost:8000/docs`
-- Additional documentation in `docs/api.md`
-
-## Testing
-
-Run the test suite:
-
-```bash
-pytest
-```
-
-For more detailed test results:
-
-```bash
-pytest -v
-```
-
-## Deployment
-
-The backend can be deployed to platforms like Railway, Render, or any container hosting service.
-
-### Railway Deployment
-
-1. Create a new Railway project
-2. Connect your GitHub repository
-3. Add the required environment variables
-4. Deploy!
-
-### Render Deployment
-
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Set environment variables
-4. Configure build and start commands
+The AI Chat component is configured to use your textbook content by default with the book ID: `bd8add9a-3444-4a7d-978b-ca0952c59bca`. This means users don't need to specify a book ID when asking questions.
