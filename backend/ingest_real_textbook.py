@@ -69,7 +69,7 @@ def ingest_textbook_to_rag(content, title="AI Textbook", author="Textbook Author
     }
     
     # Send the request to your API
-    api_url = "http://localhost:8000/api/v1/books/ingest"
+    api_url = "http://localhost:12345/api/v1/books/ingest"
     
     try:
         print("[INFO] Sending textbook content to RAG API...")
